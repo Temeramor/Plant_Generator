@@ -502,7 +502,7 @@ static func _build_spruce(c: Ctx) -> void:
             var a := az + TAU * k / arms + rng.randf_range(-0.25, 0.25)
             var dir := Vector3(cos(a), -0.3 - 0.12 * (1.0 - frac), sin(a)).normalized()
             var endp := base + dir * alen
-            _line(c, base, endp, 0.9, 0.5)
+            _line(c, base, endp, 0.9 / c.lod_scale, 0.5 / c.lod_scale)
             var two := alen > 11.0 / c.lod_scale
             var rx := maxf(2.5 / c.lod_scale, alen * (0.34 if two else 0.5))
             for q in (2 if two else 1):
