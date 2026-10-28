@@ -281,7 +281,7 @@ static func make_tree(kind: int, seed_val: int, lod: int = 0) -> VoxGrid:
     var resolution_factor: float = 1.0
 
     # Учёт вторичных ветвей и объёма листвы, чтобы широкие кроны не обрезались сеткой.
-    var branch_extent: float = 1.45 if kind != Kind.SPRUCE and p.max_depth > 0 else 1.0
+    var branch_extent: float = 1.60 if kind != Kind.SPRUCE and p.max_depth > 0 else 1.0
     var half: int = ceili(p.br_len_max * branch_extent + p.lobe_max * (1.0 + p.rough) + 6.0 / resolution_factor)
     # Высота соответствует контуру кроны без избыточного пустого объёма.
     var hgt: int = ceili(p.trunk_h + p.br_len_max * 0.55 + p.lobe_max * (p.lobe_flat + 0.45) + 6.0 / resolution_factor)
