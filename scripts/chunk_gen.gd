@@ -35,13 +35,13 @@ static func _pick_kind(region: float, r: float) -> int:
         if r < 0.9:
             return PlantGen.Kind.BIRCH
         return PlantGen.Kind.POPLAR
-    if r < 0.28:
+    if r < 0.36:
         return PlantGen.Kind.OAK
-    if r < 0.52:
+    if r < 0.59:
         return PlantGen.Kind.BIRCH
-    if r < 0.70:
+    if r < 0.77:
         return PlantGen.Kind.CHESTNUT
-    if r < 0.82:
+    if r < 0.88:
         return PlantGen.Kind.POPLAR
     return PlantGen.Kind.SPRUCE
 

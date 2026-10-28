@@ -4,6 +4,12 @@ extends RefCounted
 
 enum Kind { OAK, BIRCH, CHESTNUT, POPLAR, SPRUCE }
 
+const OakProfile = preload("res://scripts/trees/oak.gd")
+const BirchProfile = preload("res://scripts/trees/birch.gd")
+const ChestnutProfile = preload("res://scripts/trees/chestnut.gd")
+const PoplarProfile = preload("res://scripts/trees/poplar.gd")
+const SpruceProfile = preload("res://scripts/trees/spruce.gd")
+
 
 class TreeP:
     var bark := Color.BLACK
@@ -39,6 +45,8 @@ class TreeP:
     var hollow := 0.6
     var top_lobe := 1.0
     var fill_p := 0.4
+    var root_len_min := 5.0
+    var root_len_max := 9.0
 
 
 class Ctx:
@@ -73,147 +81,21 @@ static func _noise(s: int, f: float) -> FastNoiseLite:
 
 static func _params(kind: int, rng: RandomNumberGenerator) -> TreeP:
     var p := TreeP.new()
-    # Все линейные размеры заданы в ячейках по 0,1 м.
-    # s добавляет индивидуальную вариативность размера взрослого дерева.
+    # Линейные размеры указаны в вокселях по 10 см; небольшой разброс сохраняет уникальность.
     var s := rng.randf_range(0.90, 1.10)
     match kind:
         Kind.OAK:
-            p.bark = Color("5b4631")
-            p.leaf = Color("4f7d2b")
-            p.leaf_alt = Color("8aaa3a")
-            p.trunk_h = rng.randf_range(205.0, 255.0) * s
-            p.r0 = 6.0 * s
-            p.r1 = 2.5 * s
-            p.wobble = 0.12
-            p.lean = 0.1
-            p.roots = 4
-            p.br_min = 4
-            p.br_max = 6
-            p.br_start = 0.34
-            p.br_taper = 0.9
-            p.br_len_min = 42.0 * s
-            p.br_len_max = 56.0 * s
-            p.pitch_min = -0.05
-            p.pitch_max = 0.45
-            p.crook = 0.35
-            p.droop = 0.15
-            p.sub_prob = 0.7
-            p.sub_angle = 0.9
-            p.max_depth = 1
-            p.lobe_min = 11.0 * s
-            p.lobe_max = 16.0 * s
-            p.lobe_flat = 0.72
-            p.density = 0.93
-            p.rough = 0.5
-            p.hollow = 0.66
-            p.fill_p = 0.5
+            OakProfile.configure(p, rng, s)
         Kind.BIRCH:
-            p.bark = Color("e6e2d8")
-            p.leaf = Color("6b9a32")
-            p.leaf_alt = Color("a7c24a")
-            p.spot = true
-            p.trunk_h = rng.randf_range(165.0, 215.0) * s
-            p.r0 = 2.8 * s
-            p.r1 = 0.9 * s
-            p.wobble = 0.08
-            p.lean = 0.12
-            p.br_min = 7
-            p.br_max = 10
-            p.br_start = 0.32
-            p.br_taper = 0.55
-            p.br_len_min = 20.0 * s
-            p.br_len_max = 36.0 * s
-            p.pitch_min = 0.35
-            p.pitch_max = 0.85
-            p.crook = 0.25
-            p.droop = 0.5
-            p.sub_prob = 0.5
-            p.sub_angle = 0.8
-            p.max_depth = 1
-            p.lobe_min = 6.5 * s
-            p.lobe_max = 10.0 * s
-            p.lobe_flat = 0.9
-            p.density = 0.8
-            p.rough = 0.55
-            p.hollow = 0.5
-            p.fill_p = 0.3
+            BirchProfile.configure(p, rng, s)
         Kind.CHESTNUT:
-            p.bark = Color("4a3a2a")
-            p.leaf = Color("3f6b24")
-            p.leaf_alt = Color("6f9a30")
-            p.trunk_h = rng.randf_range(185.0, 245.0) * s
-            p.r0 = 6.5 * s
-            p.r1 = 3.0 * s
-            p.wobble = 0.1
-            p.lean = 0.08
-            p.roots = 5
-            p.br_min = 5
-            p.br_max = 7
-            p.br_start = 0.34
-            p.br_taper = 0.9
-            p.br_len_min = 42.0 * s
-            p.br_len_max = 58.0 * s
-            p.pitch_min = 0.0
-            p.pitch_max = 0.5
-            p.crook = 0.3
-            p.droop = 0.2
-            p.sub_prob = 0.7
-            p.sub_angle = 0.9
-            p.max_depth = 1
-            p.lobe_min = 12.0 * s
-            p.lobe_max = 18.0 * s
-            p.lobe_flat = 0.75
-            p.density = 0.97
-            p.rough = 0.45
-            p.hollow = 0.7
-            p.fill_p = 0.6
+            ChestnutProfile.configure(p, rng, s)
         Kind.POPLAR:
-            p.bark = Color("6a5d4b")
-            p.leaf = Color("5f9230")
-            p.leaf_alt = Color("9bbd48")
-            p.trunk_h = rng.randf_range(250.0, 320.0) * s
-            p.r0 = 3.2 * s
-            p.r1 = 1.2 * s
-            p.wobble = 0.04
-            p.lean = 0.05
-            p.br_min = 12
-            p.br_max = 16
-            p.br_start = 0.2
-            p.br_taper = 0.45
-            p.br_len_min = 22.0 * s
-            p.br_len_max = 34.0 * s
-            p.pitch_min = 0.9
-            p.pitch_max = 1.25
-            p.crook = 0.15
-            p.sub_prob = 0.2
-            p.max_depth = 0
-            p.lobe_min = 6.0 * s
-            p.lobe_max = 10.0 * s
-            p.lobe_flat = 1.5
-            p.density = 0.9
-            p.rough = 0.45
-            p.hollow = 0.5
-            p.top_lobe = 1.1
-            p.fill_p = 0.0
+            PoplarProfile.configure(p, rng, s)
         _:
-            p.bark = Color("4b3a2b")
-            p.leaf = Color("2f5d34")
-            p.leaf_alt = Color("4d7d44")
-            p.alt_p = 0.04
-            p.trunk_h = rng.randf_range(250.0, 335.0) * s
-            p.r0 = 3.2 * s
-            p.r1 = 0.8 * s
-            p.wobble = 0.03
-            p.lean = 0.03
-            p.roots = 3
-            p.br_len_min = 28.0 * s
-            p.br_len_max = 42.0 * s
-            p.lobe_min = 4.5 * s
-            p.lobe_max = 7.5 * s
-            p.density = 0.93
-            p.rough = 0.3
-            p.hollow = 0.2
-    # индивидуальный оттенок листвы; у лиственных иногда осень
+            SpruceProfile.configure(p, rng, s)
+
+    # Индивидуальный оттенок листвы; иногда лиственные деревья переходят в осеннюю палитру.
     if kind != Kind.SPRUCE and rng.randf() < 0.1:
         var autumn := [Color("c9a227"), Color("c4631f"), Color("a8472a"), Color("b8b02a")]
         p.leaf = autumn[rng.randi() % autumn.size()]
@@ -223,11 +105,8 @@ static func _params(kind: int, rng: RandomNumberGenerator) -> TreeP:
         var lc := p.leaf
         p.leaf = Color.from_hsv(fposmod(lc.h + rng.randf_range(-0.02, 0.02), 1.0),
                 clampf(lc.s + rng.randf_range(-0.08, 0.08), 0.0, 1.0),
-                clampf(lc.v + rng.randf_range(-0.07, 0.07), 0.0, 1.0))
+                clampf(lc.v + rng.randf_range(-0.07, 0.07), 0.05, 1.0))
     return p
-
-
-# ---------------------------------------------------------------- примитивы
 
 static func _perp_rot(d: Vector3, rng: RandomNumberGenerator, angle: float) -> Vector3:
     var axis := d.cross(Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)))
@@ -355,9 +234,10 @@ static func make_tree(kind: int, seed_val: int, lod: int = 0) -> VoxGrid:
     p.lobe_max /= resolution_factor
 
     # Учёт вторичных ветвей и объёма листвы, чтобы широкие кроны не обрезались сеткой.
-    var branch_extent: float = 1.6 if kind != Kind.SPRUCE and p.max_depth > 0 else 1.0
+    var branch_extent: float = 1.45 if kind != Kind.SPRUCE and p.max_depth > 0 else 1.0
     var half: int = ceili(p.br_len_max * branch_extent + p.lobe_max * (1.0 + p.rough) + 6.0 / resolution_factor)
-    var hgt: int = ceili(p.trunk_h * 1.15 + p.br_len_max * 0.8 + p.lobe_max * 1.6 + 8.0 / resolution_factor)
+    # Высота соответствует контуру кроны без избыточного пустого объёма.
+    var hgt: int = ceili(p.trunk_h + p.br_len_max * 0.55 + p.lobe_max * (p.lobe_flat + 0.45) + 6.0 / resolution_factor)
     var g := VoxGrid.new(half * 2, hgt, half * 2)
 
     var c := Ctx.new()
@@ -388,9 +268,56 @@ static func make_tree(kind: int, seed_val: int, lod: int = 0) -> VoxGrid:
     else:
         _build_broadleaf(c)
 
+    _prune_floating_leaf_voxels(c)
     g.meta = {"trunk_h": base_trunk_h * 0.9, "trunk_r": base_trunk_r}
     return g
 
+
+static func _is_leaf_material(material_id: int, c: Ctx) -> bool:
+    var main_leaf: bool = material_id >= c.leaf_s and material_id < c.leaf_s + c.leaf_n
+    var alternate_leaf: bool = material_id >= c.alt_s and material_id < c.alt_s + c.alt_n
+    return main_leaf or alternate_leaf
+
+
+static func _has_adjacent_voxel(g: VoxGrid, x: int, y: int, z: int) -> bool:
+    for ny in range(maxi(0, y - 1), mini(g.h, y + 2)):
+        for nz in range(maxi(0, z - 1), mini(g.d, z + 2)):
+            for nx in range(maxi(0, x - 1), mini(g.w, x + 2)):
+                if nx == x and ny == y and nz == z:
+                    continue
+                if g.cells[nx + nz * g.w + ny * g.wd] != 0:
+                    return true
+    return false
+
+
+## Удаляет одиночные листовые воксели, не соприкасающиеся с ветвями или другими листьями.
+## Соседство по диагонали считается связным.
+static func _prune_floating_leaf_voxels(c: Ctx) -> void:
+    var g: VoxGrid = c.g
+    var remove := PackedInt32Array()
+    for idx in g.filled:
+        var material_id: int = int(g.cells[idx])
+        if not _is_leaf_material(material_id, c):
+            continue
+        var y: int = idx / g.wd
+        var rem: int = idx - y * g.wd
+        var z: int = rem / g.w
+        var x: int = rem - z * g.w
+        if not _has_adjacent_voxel(g, x, y, z):
+            remove.push_back(idx)
+    if remove.is_empty():
+        return
+    for idx in remove:
+        g.cells[idx] = 0
+    var compact := PackedInt32Array()
+    compact.resize(g.filled.size() - remove.size())
+    var write_idx := 0
+    for idx in g.filled:
+        if g.cells[idx] == 0:
+            continue
+        compact[write_idx] = idx
+        write_idx += 1
+    g.filled = compact
 
 static func _build_trunk(c: Ctx) -> Array[Vector3]:
     var rng := c.rng
@@ -402,8 +329,15 @@ static func _build_trunk(c: Ctx) -> Array[Vector3]:
     var lx := rng.randf_range(-1.0, 1.0) * p.lean
     var lz := rng.randf_range(-1.0, 1.0) * p.lean
     for i in n:
-        lx = clampf(lx + rng.randf_range(-1.0, 1.0) * p.wobble, -0.4, 0.4)
-        lz = clampf(lz + rng.randf_range(-1.0, 1.0) * p.wobble, -0.4, 0.4)
+        var progress: float = float(i + 1) / float(n)
+        # Не даём накопленному случайному отклонению увести ствол в сторону.
+        # Чем выше дерево, тем сильнее направление возвращается к вертикали.
+        var return_to_axis: float = lerpf(0.12, 0.90, pow(progress, 1.7))
+        lx = lerpf(lx, 0.0, return_to_axis)
+        lz = lerpf(lz, 0.0, return_to_axis)
+        var bend_noise: float = (1.0 - progress * 0.72) * 0.45
+        lx = clampf(lx + rng.randf_range(-1.0, 1.0) * p.wobble * bend_noise, -0.22, 0.22)
+        lz = clampf(lz + rng.randf_range(-1.0, 1.0) * p.wobble * bend_noise, -0.22, 0.22)
         var dir := Vector3(lx, 1.0, lz).normalized()
         var nxt := pos + dir * seg
         var ra := lerpf(p.r0, p.r1, float(i) / n)
@@ -417,8 +351,8 @@ static func _build_trunk(c: Ctx) -> Array[Vector3]:
         var a := TAU * i / p.roots + rng.randf_range(-0.4, 0.4)
         var start := Vector3(cos(a) * p.r0 * 0.5, 3.0 / c.lod_scale, sin(a) * p.r0 * 0.5)
         var dir := Vector3(cos(a), -0.45, sin(a))
-        _line(c, start, start + dir * (rng.randf_range(5.0, 9.0) / c.lod_scale),
-                p.r0 * 0.45, 0.8 / c.lod_scale)
+        var root_len: float = rng.randf_range(p.root_len_min, p.root_len_max) / c.lod_scale
+        _line(c, start, start + dir * root_len, p.r0 * 0.45, 0.8 / c.lod_scale)
     return pts
 
 
@@ -503,12 +437,16 @@ static func _build_spruce(c: Ctx) -> void:
             var dir := Vector3(cos(a), -0.3 - 0.12 * (1.0 - frac), sin(a)).normalized()
             var endp := base + dir * alen
             _line(c, base, endp, 0.9 / c.lod_scale, 0.5 / c.lod_scale)
+            # Хвоя лежит на внешней части каждой ветви; центр конуса остаётся воздушным.
             var two := alen > 11.0 / c.lod_scale
-            var rx := maxf(2.5 / c.lod_scale, alen * (0.34 if two else 0.5))
-            for q in (2 if two else 1):
-                var cc := base.lerp(endp, 0.45 + 0.4 * q)
-                _blob(c, cc + Vector3(0, 1.0 / c.lod_scale, 0),
-                        Vector3(rx, rng.randf_range(2.4, 3.4) / c.lod_scale, rx))
+            var rx := maxf(1.6 / c.lod_scale, alen * (0.20 if two else 0.24))
+            var lobe_count: int = 2 if two else 1
+            for q in range(lobe_count):
+                var branch_t: float = (0.70 + 0.21 * float(q)) if two else 0.93
+                var cc := base.lerp(endp, branch_t)
+                var thickness: float = rng.randf_range(2.8, 3.8) / c.lod_scale
+                _blob(c, cc + Vector3(0, 0.5 / c.lod_scale, 0),
+                        Vector3(rx, thickness, rx * rng.randf_range(0.88, 1.08)))
         y += rng.randf_range(4.5, 6.0) / c.lod_scale
     var top := pts[pts.size() - 1]
     _blob(c, top + Vector3(0, 3.0 / c.lod_scale, 0),
