@@ -1,5 +1,7 @@
 # Changelog
 
+- Added a comparison branch with exactly five fixed trees (one per species); all existing grass, flowers, bushes and rock generation remains unchanged.
+
 - Straighter tree trunks with stronger vertical correction towards the top.
 - Split species parameter profiles into separate scripts under `scripts/trees/` for easier tuning.
 - Broadened and roughened birch foliage with drooping branches; broadened horse-chestnut crown and lowered its thicker branches; made poplar foliage fuller and more vertical.

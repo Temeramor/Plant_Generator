@@ -6,7 +6,6 @@ const CH_VOX := 160
 const CH_M := 16.0
 const VS := 0.1
 const COVER_H := 32
-const TREE_DENSITY := 0.75   # 0..1.3 — густота деревьев
 const GRASS_CLUMPS := 90     # число пучков травы на чанк
 
 
@@ -28,29 +27,25 @@ static func _near_spawn(wx: float, wz: float) -> bool:
     return wx * wx + wz * wz < 16.0
 
 
-static func _pick_kind(region: float, r: float) -> int:
-    if region < 0.32:  # хвойный лес
-        if r < 0.7:
-            return PlantGen.Kind.SPRUCE
-        if r < 0.9:
-            return PlantGen.Kind.BIRCH
-        return PlantGen.Kind.POPLAR
-    if r < 0.36:
+## Координаты чанков тестовой пятёрки: дуб, берёза, каштан, тополь, ель.
+## Все остальные чанки не создают деревья; подлесок генерируется как обычно.
+static func _comparison_tree_kind(cx: int, cz: int) -> int:
+    if cx == 2 and cz == 2:
         return PlantGen.Kind.OAK
-    if r < 0.59:
+    if cx == -2 and cz == 0:
         return PlantGen.Kind.BIRCH
-    if r < 0.77:
+    if cx == 2 and cz == 0:
         return PlantGen.Kind.CHESTNUT
-    if r < 0.88:
+    if cx == 0 and cz == -2:
         return PlantGen.Kind.POPLAR
-    return PlantGen.Kind.SPRUCE
+    if cx == 0 and cz == 2:
+        return PlantGen.Kind.SPRUCE
+    return -1
 
 
 static func generate(world_seed: int, cx: int, cz: int, lod: int) -> Dictionary:
     var rng := RandomNumberGenerator.new()
     rng.seed = mix(world_seed, cx, cz)
-    var forest := _noise(world_seed + 11, 0.010)
-    var kindn := _noise(world_seed + 23, 0.018)
     var meadow := _noise(world_seed + 37, 0.035)
     var rockn := _noise(world_seed + 51, 0.022)
     var ox_m := cx * CH_M
@@ -60,29 +55,30 @@ static func generate(world_seed: int, cx: int, cz: int, lod: int) -> Dictionary:
     var cols: Array = []
     var face_seed := mix(world_seed, cx, cz)
 
-    # ---------- деревья (по одному кандидату в каждой четверти чанка)
+    # ---------- фиксированный тест: по одному дереву каждого вида
+    # Сохраняем прежнее количество обращений к RNG чанка: это оставляет
+    # размещение кустов, камней, цветов и травы прежним.
     for sx in 2:
         for sz in 2:
-            var tx := rng.randf_range(1.5, 6.5) + sx * 8.0
-            var tz := rng.randf_range(1.5, 6.5) + sz * 8.0
-            var roll := rng.randf()
-            var kroll := rng.randf()
-            var tseed := rng.randi()
-            var wx := ox_m + tx
-            var wz := oz_m + tz
-            var f := forest.get_noise_2d(wx, wz) * 0.5 + 0.5
-            var prob := clampf((f - 0.38) * 2.6, 0.0, 0.95) * TREE_DENSITY
-            if roll > prob or _near_spawn(wx, wz):
-                continue
-            var kind := _pick_kind(kindn.get_noise_2d(wx, wz) * 0.5 + 0.5, kroll)
-            var g := PlantGen.make_tree(kind, tseed, lod)
-            var th: float = g.meta.get("trunk_h", 30.0)
-            var tr: float = g.meta.get("trunk_r", 3.0)
-            # Дерево дальнего LOD уже построено на сетке 20 см — повторный downsample
-            # уменьшил бы физический размер. Общий подлесок упрощается отдельно ниже.
-            g.emit(md, Vector3(tx, 0.0, tz), vs, tseed)
-            cols.append({"kind": "cyl", "pos": Vector3(tx, th * VS * 0.5, tz),
-                    "r": maxf(0.15, tr * VS * 0.85), "h": th * VS})
+            var _tx := rng.randf_range(1.5, 6.5) + sx * 8.0
+            var _tz := rng.randf_range(1.5, 6.5) + sz * 8.0
+            var _roll := rng.randf()
+            var _kroll := rng.randf()
+            var _tseed := rng.randi()
+
+    var fixed_kind := _comparison_tree_kind(cx, cz)
+    if fixed_kind >= 0:
+        # Дерево стоит в центре назначенного чанка и не меняет позицию от сида.
+        var tx := CH_M * 0.5
+        var tz := CH_M * 0.5
+        var tseed := mix(world_seed + 101 + fixed_kind * 7919, cx, cz)
+        var g := PlantGen.make_tree(fixed_kind, tseed, lod)
+        var th: float = g.meta.get("trunk_h", 30.0)
+        var tr: float = g.meta.get("trunk_r", 3.0)
+        # Дальняя детализация создаётся напрямую в сетке 20 см, без повторного downsample.
+        g.emit(md, Vector3(tx, 0.0, tz), vs, tseed)
+        cols.append({"kind": "cyl", "pos": Vector3(tx, th * VS * 0.5, tz),
+                "r": maxf(0.15, tr * VS * 0.85), "h": th * VS})
 
     # ---------- подлесок: кусты, камни (общая сетка чанка)
     var cover := VoxGrid.new(CH_VOX, COVER_H, CH_VOX)
