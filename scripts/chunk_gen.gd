@@ -75,11 +75,11 @@ static func generate(world_seed: int, cx: int, cz: int, lod: int) -> Dictionary:
             if roll > prob or _near_spawn(wx, wz):
                 continue
             var kind := _pick_kind(kindn.get_noise_2d(wx, wz) * 0.5 + 0.5, kroll)
-            var g := PlantGen.make_tree(kind, tseed)
+            var g := PlantGen.make_tree(kind, tseed, lod)
             var th: float = g.meta.get("trunk_h", 30.0)
             var tr: float = g.meta.get("trunk_r", 3.0)
-            if lod > 0:
-                g = g.downsampled()
+            # Дерево дальнего LOD уже построено на сетке 20 см — повторный downsample
+            # уменьшил бы физический размер. Общий подлесок упрощается отдельно ниже.
             g.emit(md, Vector3(tx, 0.0, tz), vs, tseed)
             cols.append({"kind": "cyl", "pos": Vector3(tx, th * VS * 0.5, tz),
                     "r": maxf(0.15, tr * VS * 0.85), "h": th * VS})
