@@ -53,7 +53,6 @@ class Ctx:
     var g: VoxGrid
     var rng: RandomNumberGenerator
     var noise: FastNoiseLite
-    var leaf_noise: FastNoiseLite
     var p: TreeP
     ## Размер ячейки относительно 10 см: 1 для ближнего LOD, 2 для дальнего.
     var lod_scale: float = 1.0
@@ -69,8 +68,6 @@ class Ctx:
     var alt_p := 0.0
     var tips: Array = []
     var mids: Array = []
-    # Координаты и направления ветвей, к которым привязываются массы листвы.
-    var leaf_nodes: Array = []
 
 
 static func _noise(s: int, f: float) -> FastNoiseLite:
@@ -204,62 +201,6 @@ static func _blob(c: Ctx, ctr: Vector3, rad: Vector3) -> void:
                 g.put(x, y, z, idx)
 
 
-## Неровная шумовая масса листвы, ориентированная вдоль ветви.
-## Две частоты 3D-шума делают контур асимметричным, без шарообразной оболочки.
-static func _leaf_cluster(c: Ctx, ctr: Vector3, axis: Vector3, width: float, length_radius: float) -> void:
-    var g := c.g
-    var rng := c.rng
-    var p := c.p
-    var direction := axis.normalized()
-    if direction.length_squared() < 0.001:
-        direction = Vector3.RIGHT
-
-    var rough_extent: float = 1.0 + p.rough
-    var ex: float = (absf(direction.x) * length_radius + width) * rough_extent
-    var ey: float = (absf(direction.y) * length_radius + width) * rough_extent
-    var ez: float = (absf(direction.z) * length_radius + width) * rough_extent
-    var x0 := floori(ctr.x - ex)
-    var x1 := ceili(ctr.x + ex)
-    var y0 := maxi(floori(ctr.y - ey), 0)
-    var y1 := ceili(ctr.y + ey)
-    var z0 := floori(ctr.z - ez)
-    var z1 := ceili(ctr.z + ez)
-    var width2 := maxf(width * width, 0.01)
-    var length2 := maxf(length_radius * length_radius, 0.01)
-
-    for y in range(y0, y1 + 1):
-        for z in range(z0, z1 + 1):
-            for x in range(x0, x1 + 1):
-                var delta := Vector3(x - ctr.x, y - ctr.y, z - ctr.z)
-                var along: float = delta.dot(direction)
-                var across := delta - direction * along
-                var shape2: float = along * along / length2 + across.length_squared() / width2
-                if shape2 > rough_extent * rough_extent:
-                    continue
-
-                var broad_noise: float = c.noise.get_noise_3d(x, y, z)
-                var detail_noise: float = c.leaf_noise.get_noise_3d(x, y, z)
-                var edge: float = sqrt(shape2) + broad_noise * p.rough * 0.42 + detail_noise * 0.12
-                if edge > 1.0:
-                    continue
-
-                # Маленькие просветы между листьями; основная масса остаётся густой.
-                var keep_chance: float = clampf(p.density - maxf(edge, 0.0) * 0.05
-                        + broad_noise * 0.025 + detail_noise * 0.018, 0.0, 1.0)
-                if rng.randf() > keep_chance:
-                    continue
-
-                var shade: float = 0.52 + broad_noise * 0.24 + detail_noise * 0.16
-                shade += clampf(delta.y / maxf(length_radius, width), -1.0, 1.0) * 0.10
-                shade += rng.randf_range(-0.08, 0.08)
-                var material_id: int
-                if c.alt_p > 0.0 and rng.randf() < c.alt_p:
-                    material_id = c.alt_s + rng.randi_range(0, c.alt_n - 1)
-                else:
-                    material_id = c.leaf_s + clampi(int(shade * c.leaf_n), 0, c.leaf_n - 1)
-                g.put(x, y, z, material_id)
-
-
 static func _trunk_at(pts: Array[Vector3], f: float) -> Vector3:
     var fi := clampf(f, 0.0, 1.0) * (pts.size() - 1)
     var i := mini(int(fi), pts.size() - 2)
@@ -293,7 +234,6 @@ static func make_tree(kind: int, seed_val: int, lod: int = 0) -> VoxGrid:
     c.p = p
     c.lod_scale = resolution_factor
     c.noise = _noise(seed_val ^ 0x5bd1e995, 0.17)
-    c.leaf_noise = _noise(seed_val ^ 0x27d4eb2d, 0.36)
 
     var bark_cols := VoxPalette.shades(p.bark, 5, rng, 0.015, 0.08, 0.1)
     c.bark_s = g.add_ramp(bark_cols)
@@ -425,9 +365,6 @@ static func _branch(c: Ctx, start: Vector3, dir: Vector3, length: float, radius:
         var rb := lerpf(radius, radius * 0.45, float(i + 1) / segs)
         _line(c, pos, nxt, ra, rb)
         pos = nxt
-        # Крона будет строиться прямо вдоль ветви, а не отдельными шарами.
-        if i == 0 or i == segs - 1 or (i % 2 == 1 and i < segs - 1):
-            c.leaf_nodes.append({"pos": pos, "dir": d, "depth": depth})
         if i >= 1:
             if depth < p.max_depth and rng.randf() < p.sub_prob:
                 var sd := _perp_rot(d, rng, p.sub_angle * rng.randf_range(0.7, 1.3))
@@ -456,27 +393,29 @@ static func _build_broadleaf(c: Ctx) -> void:
         var blen := rng.randf_range(p.br_len_min, p.br_len_max) * tf
         _branch(c, origin, dir, blen, maxf(0.9, rad * 0.6), 0)
 
-    # Органическая крона: вытянутые шумовые массы, ориентированные по ветвям.
-    for node in c.leaf_nodes:
-        var center: Vector3 = node.pos
-        var direction: Vector3 = node.dir
-        var depth: int = node.depth
-        var branch_scale: float = 1.0 if depth == 0 else 0.78
-        var width: float = rng.randf_range(p.lobe_min, p.lobe_max) * 0.43 * branch_scale
-        var length_radius: float = width * rng.randf_range(1.35, 2.05)
-        center += direction * (width * 0.14)
-        center.y += rng.randf_range(-width * 0.12, width * 0.18)
-        _leaf_cluster(c, center, direction, width, length_radius)
-
-    # Верхушка состоит из нескольких неодинаковых масс вместо единого шара.
+    # Возвращаем прежние шумовые пучки на концах ветвей и между ними.
+    # Пучки немного шире, но имеют более пустую сердцевину и не заполняют всю крону.
+    for t in c.tips:
+        var tv: Vector4 = t
+        var r := rng.randf_range(p.lobe_min, p.lobe_max) * (1.0 - 0.2 * tv.w)
+        var off := Vector3(rng.randf_range(-2.0, 2.0),
+                r * 0.2 + rng.randf_range(0.0, 2.0),
+                rng.randf_range(-2.0, 2.0))
+        var width_factor: float = rng.randf_range(1.12, 1.28)
+        _blob(c, Vector3(tv.x, tv.y, tv.z) + off,
+                Vector3(r * width_factor, r * p.lobe_flat, r * width_factor * rng.randf_range(0.95, 1.15)))
+    # Небольшие пучки вдоль ветвей заполняют крону с промежутками, не образуя сплошных лент.
+    for m in c.mids:
+        var mv: Vector3 = m
+        var r2 := rng.randf_range(p.lobe_min, p.lobe_max) * 0.62
+        var width_factor: float = rng.randf_range(1.12, 1.24)
+        _blob(c, mv + Vector3(0, r2 * 0.2, 0),
+                Vector3(r2 * width_factor, r2 * p.lobe_flat, r2 * width_factor))
+    # Верхушка остаётся разветвлённой: несколько смещённых пучков с просветами.
     var top := pts[pts.size() - 1]
-    var top_width: float = p.lobe_max * 0.48 * p.top_lobe
-    _leaf_cluster(c, top + Vector3(0, top_width * 0.28, 0),
-            Vector3(0.18, 1.0, 0.05), top_width, top_width * 1.2)
-    _leaf_cluster(c, top + Vector3(top_width * 0.42, top_width * 0.10, -top_width * 0.12),
-            Vector3(1.0, 0.24, -0.35), top_width * 0.78, top_width * 1.25)
-    _leaf_cluster(c, top + Vector3(-top_width * 0.36, top_width * 0.04, top_width * 0.22),
-            Vector3(-0.8, 0.18, 0.55), top_width * 0.72, top_width * 1.15)
+    var tr := p.lobe_max * p.top_lobe
+    _blob(c, top + Vector3(0, tr * 0.30, 0),
+            Vector3(tr * 1.18, tr * p.lobe_flat, tr * 1.18))
 
 
 static func _build_spruce(c: Ctx) -> void:

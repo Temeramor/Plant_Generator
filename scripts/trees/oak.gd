@@ -26,10 +26,10 @@ static func configure(p, rng: RandomNumberGenerator, s: float) -> void:
     p.sub_prob = 0.8
     p.sub_angle = 0.85
     p.max_depth = 1
-    p.lobe_min = 12.0 * s
-    p.lobe_max = 18.0 * s
-    p.lobe_flat = 0.70
-    p.density = 0.975
+    p.lobe_min = 14.0 * s
+    p.lobe_max = 21.0 * s
+    p.lobe_flat = 0.62
+    p.density = 0.79
     p.rough = 0.68
-    p.hollow = 0.48
-    p.fill_p = 0.58
+    p.hollow = 0.60
+    p.fill_p = 0.38
