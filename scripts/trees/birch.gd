@@ -2,9 +2,9 @@ extends RefCounted
 ## Параметры кроны и ветвления: birch.
 
 static func configure(p, rng: RandomNumberGenerator, s: float) -> void:
-    p.bark = Color("e6e2d8")
-    p.leaf = Color("6b9a32")
-    p.leaf_alt = Color("a7c24a")
+    p.bark = Color("d2d0c5")
+    p.leaf = Color("54813b")
+    p.leaf_alt = Color("7b9b50")
     p.spot = true
     p.trunk_h = rng.randf_range(165.0, 215.0) * s
     p.r0 = 2.6 * s

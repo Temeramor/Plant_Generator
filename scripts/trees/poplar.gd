@@ -2,9 +2,9 @@ extends RefCounted
 ## Параметры кроны и ветвления: poplar.
 
 static func configure(p, rng: RandomNumberGenerator, s: float) -> void:
-    p.bark = Color("6a5d4b")
-    p.leaf = Color("5f9230")
-    p.leaf_alt = Color("9bbd48")
+    p.bark = Color("625b51")
+    p.leaf = Color("4b7840")
+    p.leaf_alt = Color("729357")
     p.trunk_h = rng.randf_range(250.0, 320.0) * s
     p.r0 = 3.2 * s
     p.r1 = 1.2 * s

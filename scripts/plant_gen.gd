@@ -53,6 +53,7 @@ class Ctx:
     var g: VoxGrid
     var rng: RandomNumberGenerator
     var noise: FastNoiseLite
+    var leaf_noise: FastNoiseLite
     var p: TreeP
     ## Размер ячейки относительно 10 см: 1 для ближнего LOD, 2 для дальнего.
     var lod_scale: float = 1.0
@@ -68,6 +69,8 @@ class Ctx:
     var alt_p := 0.0
     var tips: Array = []
     var mids: Array = []
+    # Координаты и направления ветвей, к которым привязываются массы листвы.
+    var leaf_nodes: Array = []
 
 
 static func _noise(s: int, f: float) -> FastNoiseLite:
@@ -95,17 +98,12 @@ static func _params(kind: int, rng: RandomNumberGenerator) -> TreeP:
         _:
             SpruceProfile.configure(p, rng, s)
 
-    # Индивидуальный оттенок листвы; иногда лиственные деревья переходят в осеннюю палитру.
-    if kind != Kind.SPRUCE and rng.randf() < 0.1:
-        var autumn := [Color("c9a227"), Color("c4631f"), Color("a8472a"), Color("b8b02a")]
-        p.leaf = autumn[rng.randi() % autumn.size()]
-        p.leaf_alt = Color("7d8a2a")
-        p.alt_p = 0.1
-    else:
-        var lc := p.leaf
-        p.leaf = Color.from_hsv(fposmod(lc.h + rng.randf_range(-0.02, 0.02), 1.0),
-                clampf(lc.s + rng.randf_range(-0.08, 0.08), 0.0, 1.0),
-                clampf(lc.v + rng.randf_range(-0.07, 0.07), 0.05, 1.0))
+    # Летняя природная палитра: только небольшие различия между экземплярами.
+    # Осенний цвет не подмешивается случайно, чтобы сравнение пород было честным.
+    var lc := p.leaf
+    p.leaf = Color.from_hsv(fposmod(lc.h + rng.randf_range(-0.012, 0.012), 1.0),
+            clampf(lc.s + rng.randf_range(-0.035, 0.035), 0.0, 1.0),
+            clampf(lc.v + rng.randf_range(-0.035, 0.035), 0.05, 1.0))
     return p
 
 static func _perp_rot(d: Vector3, rng: RandomNumberGenerator, angle: float) -> Vector3:
@@ -206,6 +204,62 @@ static func _blob(c: Ctx, ctr: Vector3, rad: Vector3) -> void:
                 g.put(x, y, z, idx)
 
 
+## Неровная шумовая масса листвы, ориентированная вдоль ветви.
+## Две частоты 3D-шума делают контур асимметричным, без шарообразной оболочки.
+static func _leaf_cluster(c: Ctx, ctr: Vector3, axis: Vector3, width: float, length_radius: float) -> void:
+    var g := c.g
+    var rng := c.rng
+    var p := c.p
+    var direction := axis.normalized()
+    if direction.length_squared() < 0.001:
+        direction = Vector3.RIGHT
+
+    var rough_extent: float = 1.0 + p.rough
+    var ex: float = (absf(direction.x) * length_radius + width) * rough_extent
+    var ey: float = (absf(direction.y) * length_radius + width) * rough_extent
+    var ez: float = (absf(direction.z) * length_radius + width) * rough_extent
+    var x0 := floori(ctr.x - ex)
+    var x1 := ceili(ctr.x + ex)
+    var y0 := maxi(floori(ctr.y - ey), 0)
+    var y1 := ceili(ctr.y + ey)
+    var z0 := floori(ctr.z - ez)
+    var z1 := ceili(ctr.z + ez)
+    var width2 := maxf(width * width, 0.01)
+    var length2 := maxf(length_radius * length_radius, 0.01)
+
+    for y in range(y0, y1 + 1):
+        for z in range(z0, z1 + 1):
+            for x in range(x0, x1 + 1):
+                var delta := Vector3(x - ctr.x, y - ctr.y, z - ctr.z)
+                var along: float = delta.dot(direction)
+                var across := delta - direction * along
+                var shape2: float = along * along / length2 + across.length_squared() / width2
+                if shape2 > rough_extent * rough_extent:
+                    continue
+
+                var broad_noise: float = c.noise.get_noise_3d(x, y, z)
+                var detail_noise: float = c.leaf_noise.get_noise_3d(x, y, z)
+                var edge: float = sqrt(shape2) + broad_noise * p.rough * 0.42 + detail_noise * 0.12
+                if edge > 1.0:
+                    continue
+
+                # Маленькие просветы между листьями; основная масса остаётся густой.
+                var keep_chance: float = clampf(p.density - maxf(edge, 0.0) * 0.05
+                        + broad_noise * 0.025 + detail_noise * 0.018, 0.0, 1.0)
+                if rng.randf() > keep_chance:
+                    continue
+
+                var shade: float = 0.52 + broad_noise * 0.24 + detail_noise * 0.16
+                shade += clampf(delta.y / maxf(length_radius, width), -1.0, 1.0) * 0.10
+                shade += rng.randf_range(-0.08, 0.08)
+                var material_id: int
+                if c.alt_p > 0.0 and rng.randf() < c.alt_p:
+                    material_id = c.alt_s + rng.randi_range(0, c.alt_n - 1)
+                else:
+                    material_id = c.leaf_s + clampi(int(shade * c.leaf_n), 0, c.leaf_n - 1)
+                g.put(x, y, z, material_id)
+
+
 static func _trunk_at(pts: Array[Vector3], f: float) -> Vector3:
     var fi := clampf(f, 0.0, 1.0) * (pts.size() - 1)
     var i := mini(int(fi), pts.size() - 2)
@@ -222,16 +276,9 @@ static func make_tree(kind: int, seed_val: int, lod: int = 0) -> VoxGrid:
     # Размеры для коллизий храним в исходных ячейках по 10 см.
     var base_trunk_h: float = p.trunk_h
     var base_trunk_r: float = p.r0
-    # Дальний LOD создаётся сразу на сетке 20 см, но сохраняет физический размер.
-    # Объём обрабатываемой 3D-сетки уменьшается примерно в 8 раз.
-    var resolution_factor: float = 1.0 if lod <= 0 else 2.0
-    p.trunk_h /= resolution_factor
-    p.r0 /= resolution_factor
-    p.r1 /= resolution_factor
-    p.br_len_min /= resolution_factor
-    p.br_len_max /= resolution_factor
-    p.lobe_min /= resolution_factor
-    p.lobe_max /= resolution_factor
+    # Геометрия всегда строится в базовой сетке 10 см. LOD упрощается
+    # только после генерации, поэтому ветви и шум не пересчитываются иначе.
+    var resolution_factor: float = 1.0
 
     # Учёт вторичных ветвей и объёма листвы, чтобы широкие кроны не обрезались сеткой.
     var branch_extent: float = 1.45 if kind != Kind.SPRUCE and p.max_depth > 0 else 1.0
@@ -246,6 +293,7 @@ static func make_tree(kind: int, seed_val: int, lod: int = 0) -> VoxGrid:
     c.p = p
     c.lod_scale = resolution_factor
     c.noise = _noise(seed_val ^ 0x5bd1e995, 0.17)
+    c.leaf_noise = _noise(seed_val ^ 0x27d4eb2d, 0.36)
 
     var bark_cols := VoxPalette.shades(p.bark, 5, rng, 0.015, 0.08, 0.1)
     c.bark_s = g.add_ramp(bark_cols)
@@ -269,7 +317,12 @@ static func make_tree(kind: int, seed_val: int, lod: int = 0) -> VoxGrid:
         _build_broadleaf(c)
 
     _prune_floating_leaf_voxels(c)
-    g.meta = {"trunk_h": base_trunk_h * 0.9, "trunk_r": base_trunk_r}
+    var tree_meta := {"trunk_h": base_trunk_h * 0.9, "trunk_r": base_trunk_r}
+    g.meta = tree_meta
+    if lod > 0:
+        var coarse := g.downsampled()
+        coarse.meta = tree_meta
+        return coarse
     return g
 
 
@@ -372,6 +425,9 @@ static func _branch(c: Ctx, start: Vector3, dir: Vector3, length: float, radius:
         var rb := lerpf(radius, radius * 0.45, float(i + 1) / segs)
         _line(c, pos, nxt, ra, rb)
         pos = nxt
+        # Крона будет строиться прямо вдоль ветви, а не отдельными шарами.
+        if i == 0 or i == segs - 1 or (i % 2 == 1 and i < segs - 1):
+            c.leaf_nodes.append({"pos": pos, "dir": d, "depth": depth})
         if i >= 1:
             if depth < p.max_depth and rng.randf() < p.sub_prob:
                 var sd := _perp_rot(d, rng, p.sub_angle * rng.randf_range(0.7, 1.3))
@@ -400,23 +456,27 @@ static func _build_broadleaf(c: Ctx) -> void:
         var blen := rng.randf_range(p.br_len_min, p.br_len_max) * tf
         _branch(c, origin, dir, blen, maxf(0.9, rad * 0.6), 0)
 
-    # листва: на концах ветвей
-    for t in c.tips:
-        var tv: Vector4 = t
-        var r := rng.randf_range(p.lobe_min, p.lobe_max) * (1.0 - 0.2 * tv.w)
-        var off := Vector3(rng.randf_range(-2.0, 2.0) / c.lod_scale,
-                r * 0.2 + rng.randf_range(0.0, 2.0) / c.lod_scale,
-                rng.randf_range(-2.0, 2.0) / c.lod_scale)
-        _blob(c, Vector3(tv.x, tv.y, tv.z) + off, Vector3(r, r * p.lobe_flat, r * rng.randf_range(0.85, 1.15)))
-    # листва: вдоль ветвей (полнота кроны)
-    for m in c.mids:
-        var mv: Vector3 = m
-        var r2 := rng.randf_range(p.lobe_min, p.lobe_max) * 0.65
-        _blob(c, mv + Vector3(0, r2 * 0.2, 0), Vector3(r2, r2 * p.lobe_flat, r2))
-    # верхушка
+    # Органическая крона: вытянутые шумовые массы, ориентированные по ветвям.
+    for node in c.leaf_nodes:
+        var center: Vector3 = node.pos
+        var direction: Vector3 = node.dir
+        var depth: int = node.depth
+        var branch_scale: float = 1.0 if depth == 0 else 0.78
+        var width: float = rng.randf_range(p.lobe_min, p.lobe_max) * 0.43 * branch_scale
+        var length_radius: float = width * rng.randf_range(1.35, 2.05)
+        center += direction * (width * 0.14)
+        center.y += rng.randf_range(-width * 0.12, width * 0.18)
+        _leaf_cluster(c, center, direction, width, length_radius)
+
+    # Верхушка состоит из нескольких неодинаковых масс вместо единого шара.
     var top := pts[pts.size() - 1]
-    var tr := p.lobe_max * p.top_lobe
-    _blob(c, top + Vector3(0, tr * 0.35, 0), Vector3(tr, tr * p.lobe_flat, tr))
+    var top_width: float = p.lobe_max * 0.48 * p.top_lobe
+    _leaf_cluster(c, top + Vector3(0, top_width * 0.28, 0),
+            Vector3(0.18, 1.0, 0.05), top_width, top_width * 1.2)
+    _leaf_cluster(c, top + Vector3(top_width * 0.42, top_width * 0.10, -top_width * 0.12),
+            Vector3(1.0, 0.24, -0.35), top_width * 0.78, top_width * 1.25)
+    _leaf_cluster(c, top + Vector3(-top_width * 0.36, top_width * 0.04, top_width * 0.22),
+            Vector3(-0.8, 0.18, 0.55), top_width * 0.72, top_width * 1.15)
 
 
 static func _build_spruce(c: Ctx) -> void:
