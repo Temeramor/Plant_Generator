@@ -365,7 +365,7 @@ static func make_tree(kind: int, seed_val: int, lod: int = 0) -> VoxGrid:
     c.rng = rng
     c.p = p
     c.lod_scale = resolution_factor
-    c.noise = _noise(seed_val ^ 0x5bd1e995, 0.17 / resolution_factor)
+    c.noise = _noise(seed_val ^ 0x5bd1e995, 0.17)
 
     var bark_cols := VoxPalette.shades(p.bark, 5, rng, 0.015, 0.08, 0.1)
     c.bark_s = g.add_ramp(bark_cols)
